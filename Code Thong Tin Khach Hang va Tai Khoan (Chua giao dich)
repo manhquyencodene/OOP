@@ -1,0 +1,374 @@
+#include <iostream>
+#include <string>
+#include <vector>
+#include <memory>
+#include <iomanip>
+#include <sstream>
+#include <fstream>
+using namespace std;
+
+// ------------------------- Ngay thang nam -------------------------
+class NgayThangNam {
+private:
+    int ngay, thang, nam;
+public:
+    NgayThangNam(int d = 1, int m = 1, int y = 1970) : ngay(d), thang(m), nam(y) {}
+
+    void Nhap(const string& moTa = "Nhap ngay (dd mm yyyy): ") {
+        bool valid = false;
+        while (!valid) {
+            cout << moTa;
+            cin >> ngay >> thang >> nam;
+            if (ngay >= 1 && ngay <= 31 && thang >= 1 && thang <= 12 && nam >= 1900) {
+                valid = true;
+            }
+            else {
+                cout << "Ngay thang nam khong hop le! Vui long nhap lai.\n";
+            }
+        }
+    }
+
+    void TuChuoi(const string& chuoi) {
+        stringstream ss(chuoi);
+        char delimiter;
+        ss >> ngay >> delimiter >> thang >> delimiter >> nam;
+        if (ss.fail() || delimiter != '/') {
+            ngay = 1; thang = 1; nam = 1970; // Default on error
+        }
+    }
+
+    string ToString() const {
+        ostringstream oss;
+        oss << setw(2) << setfill('0') << ngay << "/"
+            << setw(2) << setfill('0') << thang << "/" << nam;
+        return oss.str();
+    }
+};
+
+// ------------------------- Tai khoan -------------------------
+class TaiKhoan {
+protected:
+    string soTaiKhoan;
+    double soDu;
+    int trangThai;
+    NgayThangNam ngayMo;
+
+public:
+    virtual ~TaiKhoan() {}
+    virtual string LayLoai() const = 0;
+    virtual void GhiCSV(ofstream& fout) const = 0;
+    virtual void DocTuDongCSV(const vector<string>& fields) = 0;
+    virtual string LaySoTK() const { return soTaiKhoan; }
+
+    virtual void Nhap() {
+        cout << "Nhap so tai khoan: ";
+        cin >> soTaiKhoan;
+        while (soTaiKhoan.empty()) {
+            cout << "So tai khoan khong duoc trong! Nhap lai: ";
+            cin >> soTaiKhoan;
+        }
+        cout << "Nhap so du: ";
+        cin >> soDu;
+        while (soDu < 0) {
+            cout << "So du khong duoc am! Nhap lai: ";
+            cin >> soDu;
+        }
+        cout << "Nhap trang thai (1: Hoat dong, 0: Khoa): ";
+        cin >> trangThai;
+        while (trangThai != 0 && trangThai != 1) {
+            cout << "Trang thai chi duoc la 0 hoac 1! Nhap lai: ";
+            cin >> trangThai;
+        }
+        ngayMo.Nhap("Nhap ngay mo tai khoan (dd mm yyyy): ");
+    }
+
+    virtual void Xuat() const {
+        cout << "SoTK: " << soTaiKhoan
+            << " | SoDu: " << fixed << setprecision(2) << soDu
+            << " | TrangThai: " << (trangThai == 1 ? "Hoat dong" : "Bi khoa")
+            << " | Ngay mo: " << ngayMo.ToString();
+    }
+};
+
+class TaiKhoanTietKiem : public TaiKhoan {
+private:
+    double laiSuat;
+public:
+    void Nhap() override {
+        TaiKhoan::Nhap();
+        cout << "Nhap lai suat (%): ";
+        cin >> laiSuat;
+        while (laiSuat < 0) {
+            cout << "Lai suat khong duoc am! Nhap lai: ";
+            cin >> laiSuat;
+        }
+    }
+
+    void Xuat() const override {
+        TaiKhoan::Xuat();
+        cout << " | Lai suat: " << laiSuat << "%\n";
+    }
+
+    string LayLoai() const override { return "TietKiem"; }
+
+    void GhiCSV(ofstream& fout) const override {
+        fout << "TietKiem," << soTaiKhoan << "," << fixed << setprecision(2) << soDu << ","
+            << laiSuat << "," << trangThai << "," << ngayMo.ToString();
+    }
+
+    void DocTuDongCSV(const vector<string>& fields) override {
+        soTaiKhoan = fields[1];
+        soDu = stod(fields[2]);
+        laiSuat = stod(fields[3]);
+        trangThai = stoi(fields[4]);
+        ngayMo.TuChuoi(fields[5]);
+    }
+};
+
+class TaiKhoanThanhToan : public TaiKhoan {
+public:
+    void Nhap() override {
+        TaiKhoan::Nhap();
+    }
+
+    void Xuat() const override {
+        TaiKhoan::Xuat();
+        cout << " | Loai: ThanhToan\n";
+    }
+
+    string LayLoai() const override { return "ThanhToan"; }
+
+    void GhiCSV(ofstream& fout) const override {
+        fout << "ThanhToan," << soTaiKhoan << "," << fixed << setprecision(2) << soDu << ",,"
+            << trangThai << "," << ngayMo.ToString();
+    }
+
+    void DocTuDongCSV(const vector<string>& fields) override {
+        soTaiKhoan = fields[1];
+        soDu = stod(fields[2]);
+        trangThai = stoi(fields[4]);
+        ngayMo.TuChuoi(fields[5]);
+    }
+};
+
+// ------------------------- Khach hang -------------------------
+class KhachHang {
+private:
+    string hoTen, gioiTinh, soCMND, diaChi, sdt, email;
+    NgayThangNam ngaySinh;
+    shared_ptr<TaiKhoan> taiKhoan;
+
+public:
+    void Nhap() {
+        cin.ignore();
+        cout << "Nhap ho ten: ";
+        getline(cin, hoTen);
+        while (hoTen.empty()) {
+            cout << "Ho ten khong duoc trong! Nhap lai: ";
+            getline(cin, hoTen);
+        }
+        cout << "Nhap gioi tinh (Nam/Nu): ";
+        getline(cin, gioiTinh);
+        while (gioiTinh != "Nam" && gioiTinh != "Nu") {
+            cout << "Gioi tinh chi duoc la Nam hoac Nu! Nhap lai: ";
+            getline(cin, gioiTinh);
+        }
+        cout << "Nhap ngay sinh:\n";
+        ngaySinh.Nhap();
+        cout << "Nhap so CMND: ";
+        getline(cin, soCMND);
+        while (soCMND.empty()) {
+            cout << "So CMND khong duoc trong! Nhap lai: ";
+            getline(cin, soCMND);
+        }
+        cout << "Nhap dia chi: ";
+        getline(cin, diaChi);
+        cout << "Nhap so dien thoai: ";
+        getline(cin, sdt);
+        cout << "Nhap email: ";
+        getline(cin, email);
+
+        int loai;
+        cout << "Chon loai tai khoan (1: TietKiem, 2: ThanhToan): ";
+        cin >> loai;
+        while (loai != 1 && loai != 2) {
+            cout << "Loai tai khoan chi duoc la 1 hoac 2! Nhap lai: ";
+            cin >> loai;
+        }
+
+        if (loai == 1)
+            taiKhoan = make_shared<TaiKhoanTietKiem>();
+        else
+            taiKhoan = make_shared<TaiKhoanThanhToan>();
+
+        taiKhoan->Nhap();
+    }
+
+    void Xuat() const {
+        cout << "\n--- THONG TIN KHACH HANG ---\n";
+        cout << "Ho ten: " << hoTen << "\n";
+        cout << "Gioi tinh: " << gioiTinh << "\n";
+        cout << "Ngay sinh: " << ngaySinh.ToString() << "\n";
+        cout << "CMND: " << soCMND << "\n";
+        cout << "Dia chi: " << diaChi << "\n";
+        cout << "SDT: " << sdt << "\n";
+        cout << "Email: " << email << "\n";
+        if (taiKhoan) {
+            cout << "--- Tai khoan ---\n";
+            taiKhoan->Xuat();
+        }
+    }
+
+    string LayCMND() const {
+        return soCMND;
+    }
+
+    void GhiCSV(ofstream& fout) const {
+        fout << hoTen << "," << gioiTinh << "," << ngaySinh.ToString() << ","
+            << soCMND << "," << diaChi << "," << sdt << "," << email << ",";
+        taiKhoan->GhiCSV(fout);
+        fout << "\n";
+    }
+
+    void DocTuDongCSV(const vector<string>& fields) {
+        hoTen = fields[0];
+        gioiTinh = fields[1];
+        ngaySinh.TuChuoi(fields[2]);
+        soCMND = fields[3];
+        diaChi = fields[4];
+        sdt = fields[5];
+        email = fields[6];
+        if (fields[7] == "TietKiem") {
+            taiKhoan = make_shared<TaiKhoanTietKiem>();
+        }
+        else {
+            taiKhoan = make_shared<TaiKhoanThanhToan>();
+        }
+        vector<string> taiKhoanFields(fields.begin() + 7, fields.end());
+        taiKhoan->DocTuDongCSV(taiKhoanFields);
+    }
+};
+
+// ------------------------- Quan ly khach hang -------------------------
+class QuanLyKhachHang {
+private:
+    vector<shared_ptr<KhachHang>> danhSach;
+
+public:
+    void ThemKhachHang() {
+        auto kh = make_shared<KhachHang>();
+        kh->Nhap();
+        danhSach.push_back(kh);
+        cout << "Da them khach hang thanh cong!\n";
+    }
+
+    void LietKe() const {
+        if (danhSach.empty()) {
+            cout << "Danh sach khach hang trong!\n";
+            return;
+        }
+        for (const auto& kh : danhSach) {
+            kh->Xuat();
+            cout << "--------------------------\n";
+        }
+    }
+
+    void TimTheoCMND(const string& cmnd) const {
+        for (const auto& kh : danhSach) {
+            if (kh->LayCMND() == cmnd) {
+                kh->Xuat();
+                return;
+            }
+        }
+        cout << "Khong tim thay khach hang co CMND: " << cmnd << "\n";
+    }
+
+    void GhiCSV(const string& filename) const {
+        ofstream fout(filename);
+        if (!fout.is_open()) {
+            cout << "Khong the mo file " << filename << " de ghi!\n";
+            return;
+        }
+        // Write header
+        fout << "HoTen,GioiTinh,NgaySinh,SoCMND,DiaChi,SDT,Email,LoaiTaiKhoan,SoTaiKhoan,SoDu,LaiSuat,TrangThai,NgayMo\n";
+        // Write data
+        for (const auto& kh : danhSach) {
+            kh->GhiCSV(fout);
+        }
+        fout.close();
+        cout << "Da ghi danh sach khach hang vao " << filename << "\n";
+    }
+
+    void DocCSV(const string& filename) {
+        ifstream fin(filename);
+        if (!fin.is_open()) {
+            cout << "Khong the mo file " << filename << " de doc!\n";
+            return;
+        }
+        danhSach.clear();
+        string line;
+        // Skip header
+        getline(fin, line); // Assume first line is header
+        while (getline(fin, line)) {
+            vector<string> fields;
+            string field;
+            stringstream ss(line);
+            while (getline(ss, field, ',')) {
+                fields.push_back(field);
+            }
+            if (fields.size() < 12) continue; // Skip invalid lines
+            auto kh = make_shared<KhachHang>();
+            kh->DocTuDongCSV(fields);
+            danhSach.push_back(kh);
+        }
+        fin.close();
+        cout << "Da doc danh sach khach hang tu " << filename << "\n";
+    }
+};
+
+// ------------------------- Ham main -------------------------
+int main() {
+    QuanLyKhachHang ql;
+    int choice;
+    string cmnd, filename = "khachhang.csv";
+
+    do {
+        cout << "\n=== MENU QUAN LY NGAN HANG ===\n";
+        cout << "1. Them khach hang\n";
+        cout << "2. Liet ke tat ca khach hang\n";
+        cout << "3. Tim khach hang theo CMND\n";
+        cout << "4. Ghi danh sach vao file CSV\n";
+        cout << "5. Doc danh sach tu file CSV\n";
+        cout << "6. Thoat\n";
+        cout << "Nhap lua chon: ";
+        cin >> choice;
+        cin.ignore();
+
+        switch (choice) {
+        case 1:
+            ql.ThemKhachHang();
+            break;
+        case 2:
+            ql.LietKe();
+            break;
+        case 3:
+            cout << "Nhap so CMND can tim: ";
+            getline(cin, cmnd);
+            ql.TimTheoCMND(cmnd);
+            break;
+        case 4:
+            ql.GhiCSV(filename);
+            break;
+        case 5:
+            ql.DocCSV(filename);
+            break;
+        case 6:
+            cout << "Tam biet!\n";
+            break;
+        default:
+            cout << "Lua chon khong hop le!\n";
+        }
+    } while (choice != 6);
+
+    return 0;
+}
