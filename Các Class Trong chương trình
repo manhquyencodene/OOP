@@ -1,0 +1,105 @@
+#include <iostream>
+#include <string>
+#include <vector>
+#include <memory>
+using namespace std;
+
+// ------------------------- Lớp Ngày tháng -------------------------
+class NgayThangNam {
+private:
+    int ngay, thang, nam;
+
+public:
+    NgayThangNam(int d = 1, int m = 1, int y = 1970) : ngay(d), thang(m), nam(y) {}
+    void Nhap();
+    string ToString() const;
+};
+
+// ------------------------- Lớp Giao dịch -------------------------
+class GiaoDich {
+private:
+    string loaiGiaoDich;
+    double soTien;
+    string thoiGian;
+
+public:
+    GiaoDich(string loai, double tien, string time);
+    string ThongTin() const;
+};
+
+// ------------------------- Lớp Tài khoản -------------------------
+class TaiKhoan {
+protected:
+    string soTaiKhoan;
+    double soDu;
+    NgayThangNam ngayMo;
+    vector<GiaoDich> lichSu;
+
+public:
+    TaiKhoan(string soTK = "", double du = 0);
+    virtual void RutTien(double tien) = 0;
+    virtual void GuiTien(double tien);
+    virtual void TinhLai() = 0;
+    virtual void XuatThongTin() const = 0;
+    void ThemGiaoDich(const GiaoDich& gd);
+    string LaySoTaiKhoan() const;
+};
+
+// ------------------------- TK Tiết kiệm -------------------------
+class TaiKhoanTietKiem : public TaiKhoan {
+private:
+    double laiSuat;
+
+public:
+    TaiKhoanTietKiem(string soTK, double du, double ls);
+    void RutTien(double tien) override;
+    void TinhLai() override;
+    void XuatThongTin() const override;
+};
+
+// ------------------------- TK Thanh toán -------------------------
+class TaiKhoanThanhToan : public TaiKhoan {
+public:
+    TaiKhoanThanhToan(string soTK, double du);
+    void RutTien(double tien) override;
+    void TinhLai() override;  // không làm gì
+    void XuatThongTin() const override;
+};
+
+// ------------------------- Lớp Khách hàng -------------------------
+class KhachHang {
+private:
+    string hoTen;
+    string gioiTinh;
+    NgayThangNam ngaySinh;
+    string soCMND;
+    string diaChi;
+    string sdt;
+    string email;
+    vector<shared_ptr<TaiKhoan>> dsTaiKhoan;
+
+public:
+    KhachHang(string ten = "");
+    void NhapThongTin();
+    void ThemTaiKhoan(shared_ptr<TaiKhoan> tk);
+    void XuatThongTin() const;
+    string LayHoTen() const;
+};
+
+// ------------------------- Quản lý ngân hàng -------------------------
+class QuanLyNganHang {
+private:
+    vector<KhachHang> danhSachKH;
+
+public:
+    void ThemKhachHang();
+    void TimKiemKhachHangTheoTen(const string& ten) const;
+    void LietKeTatCaKhachHang() const;
+};
+
+// ------------------------- Hàm chính -------------------------
+int main() {
+    QuanLyNganHang ql;
+    // Viết menu xử lý ở đây
+    return 0;
+}
