@@ -1,0 +1,596 @@
+#include <gtkmm.h>
+#include <iostream>
+#include <string>
+#include <vector>
+#include <memory>
+#include <iomanip>
+#include <sstream>
+#include <fstream>
+using namespace std;
+
+class NgayThangNam {
+private:
+    int ngay, thang, nam;
+public:
+    NgayThangNam(int d = 1, int m = 1, int y = 1970) : ngay(d), thang(m), nam(y) {}
+
+    void Nhap(const string& input) {
+        stringstream ss(input);
+        ss >> ngay >> thang >> nam;
+        if (ngay < 1 || ngay > 31 || thang < 1 || thang > 12 || nam < 1900) {
+            ngay = 1; thang = 1; nam = 1970;
+        }
+    }
+
+    void TuChuoi(const string& chuoi) {
+        stringstream ss(chuoi);
+        char delimiter;
+        ss >> ngay >> delimiter >> thang >> delimiter >> nam;
+        if (ss.fail() || delimiter != '/') {
+            ngay = 1; thang = 1; nam = 1970;
+        }
+    }
+
+    string ToString() const {
+        ostringstream oss;
+        oss << setw(2) << setfill('0') << ngay << "/"
+            << setw(2) << setfill('0') << thang << "/" << nam;
+        return oss.str();
+    }
+};
+
+class GiaoDich {
+private:
+    string loaiGiaoDich;
+    double soTien;
+    string thoiGian;
+
+public:
+    GiaoDich(string loai = "", double tien = 0, string time = "")
+        : loaiGiaoDich(loai), soTien(tien), thoiGian(time) {}
+
+    string ThongTin() const {
+        ostringstream oss;
+        oss << "Loai: " << loaiGiaoDich << " | So tien: " << fixed << setprecision(2)
+            << soTien << " | Thoi gian: " << thoiGian;
+        return oss.str();
+    }
+
+    string ToCSV() const {
+        ostringstream oss;
+        oss << loaiGiaoDich << "," << fixed << setprecision(2) << soTien << "," << thoiGian;
+        return oss.str();
+    }
+
+    void FromCSV(const vector<string>& fields) {
+        if (fields.size() >= 3) {
+            loaiGiaoDich = fields[0];
+            soTien = stod(fields[1]);
+            thoiGian = fields[2];
+        }
+    }
+};
+
+class TaiKhoan {
+protected:
+    string soTaiKhoan;
+    double soDu;
+    int trangThai;
+    NgayThangNam ngayMo;
+    vector<GiaoDich> lichSuGiaoDich;
+
+public:
+    virtual ~TaiKhoan() {}
+    virtual string LayLoai() const = 0;
+    virtual void GhiCSV(ofstream& fout) const = 0;
+    virtual void DocTuDongCSV(const vector<string>& fields) = 0;
+    virtual string LaySoTK() const { return soTaiKhoan; }
+
+    virtual void Nhap(const string& soTK, double sd, int tt, const string& ngay) {
+        soTaiKhoan = soTK;
+        soDu = sd;
+        trangThai = tt;
+        ngayMo.Nhap(ngay);
+    }
+
+    virtual string Xuat() const {
+        ostringstream oss;
+        oss << "SoTK: " << soTaiKhoan
+            << " | SoDu: " << fixed << setprecision(2) << soDu
+            << " | TrangThai: " << (trangThai == 1 ? "Hoat dong" : "Bi khoa")
+            << " | Ngay mo: " << ngayMo.ToString();
+        oss << "\nLich su giao dich (" << lichSuGiaoDich.size() << "):\n";
+        if (lichSuGiaoDich.empty()) {
+            oss << "  (Khong co giao dich)\n";
+        }
+        else {
+            for (size_t i = 0; i < lichSuGiaoDich.size(); ++i) {
+                oss << "  " << (i + 1) << ". " << lichSuGiaoDich[i].ThongTin() << "\n";
+            }
+        }
+        return oss.str();
+    }
+
+    bool GuiTien(double tien, const string& thoiGian) {
+        if (tien <= 0) return false;
+        if (trangThai == 0) return false;
+        soDu += tien;
+        lichSuGiaoDich.emplace_back("GuiTien", tien, thoiGian);
+        return true;
+    }
+
+    bool RutTien(double tien, const string& thoiGian) {
+        if (tien <= 0) return false;
+        if (trangThai == 0) return false;
+        if (tien > soDu) return false;
+        soDu -= tien;
+        lichSuGiaoDich.emplace_back("RutTien", tien, thoiGian);
+        return true;
+    }
+
+    const vector<GiaoDich>& LayLichSuGiaoDich() const {
+        return lichSuGiaoDich;
+    }
+
+    void ThemGiaoDich(const GiaoDich& gd) {
+        lichSuGiaoDich.push_back(gd);
+    }
+};
+
+class TaiKhoanTietKiem : public TaiKhoan {
+private:
+    double laiSuat;
+public:
+    void Nhap(const string& soTK, double sd, int tt, const string& ngay, double ls) {
+        TaiKhoan::Nhap(soTK, sd, tt, ngay);
+        laiSuat = ls;
+    }
+
+    string Xuat() const {
+        ostringstream oss;
+        oss << TaiKhoan::Xuat();
+        oss << " | Lai suat: " << laiSuat << "%\n";
+        return oss.str();
+    }
+
+    string LayLoai() const override { return "TietKiem"; }
+
+    void GhiCSV(ofstream& fout) const override {
+        fout << "TietKiem," << soTaiKhoan << "," << fixed << setprecision(2) << soDu << ","
+            << laiSuat << "," << trangThai << "," << ngayMo.ToString();
+        fout << "," << lichSuGiaoDich.size();
+        for (const auto& gd : lichSuGiaoDich) {
+            fout << "," << gd.ToCSV();
+        }
+    }
+
+    void DocTuDongCSV(const vector<string>& fields) override {
+        soTaiKhoan = fields[1];
+        soDu = stod(fields[2]);
+        laiSuat = stod(fields[3]);
+        trangThai = stoi(fields[4]);
+        ngayMo.TuChuoi(fields[5]);
+        lichSuGiaoDich.clear();
+        if (fields.size() < 7) return;
+        int soGiaoDich = stoi(fields[6]);
+        for (int i = 0; i < soGiaoDich && (7 + i * 3 + 2) < fields.size(); ++i) {
+            vector<string> gdFields = { fields[7 + i * 3], fields[8 + i * 3], fields[9 + i * 3] };
+            GiaoDich gd;
+            gd.FromCSV(gdFields);
+            lichSuGiaoDich.push_back(gd);
+        }
+    }
+};
+
+class TaiKhoanThanhToan : public TaiKhoan {
+public:
+    void Nhap(const string& soTK, double sd, int tt, const string& ngay) {
+        TaiKhoan::Nhap(soTK, sd, tt, ngay);
+    }
+
+    string Xuat() const {
+        ostringstream oss;
+        oss << TaiKhoan::Xuat();
+        oss << " | Loai: ThanhToan\n";
+        return oss.str();
+    }
+
+    string LayLoai() const override { return "ThanhToan"; }
+
+    void GhiCSV(ofstream& fout) const override {
+        fout << "ThanhToan," << soTaiKhoan << "," << fixed << setprecision(2) << soDu << ",,"
+            << trangThai << "," << ngayMo.ToString();
+        fout << "," << lichSuGiaoDich.size();
+        for (const auto& gd : lichSuGiaoDich) {
+            fout << "," << gd.ToCSV();
+        }
+    }
+
+    void DocTuDongCSV(const vector<string>& fields) override {
+        soTaiKhoan = fields[1];
+        soDu = stod(fields[2]);
+        trangThai = stoi(fields[4]);
+        ngayMo.TuChuoi(fields[5]);
+        lichSuGiaoDich.clear();
+        if (fields.size() < 7) return;
+        int soGiaoDich = stoi(fields[6]);
+        for (int i = 0; i < soGiaoDich && (7 + i * 3 + 2) < fields.size(); ++i) {
+            vector<string> gdFields = { fields[7 + i * 3], fields[8 + i * 3], fields[9 + i * 3] };
+            GiaoDich gd;
+            gd.FromCSV(gdFields);
+            lichSuGiaoDich.push_back(gd);
+        }
+    }
+};
+
+class KhachHang {
+private:
+    string hoTen, gioiTinh, soCMND, diaChi, sdt, email;
+    NgayThangNam ngaySinh;
+    shared_ptr<TaiKhoan> taiKhoan;
+
+public:
+    void Nhap(const string& ht, const string& gt, const string& ns, const string& cmnd, 
+              const string& dc, const string& sdt_, const string& email_, int loai, 
+              const string& soTK, double sd, int tt, const string& ngay, double ls = 0) {
+        hoTen = ht;
+        gioiTinh = gt;
+        ngaySinh.Nhap(ns);
+        soCMND = cmnd;
+        diaChi = dc;
+        sdt = sdt_;
+        email = email_;
+        if (loai == 1) {
+            taiKhoan = make_shared<TaiKhoanTietKiem>();
+            dynamic_pointer_cast<TaiKhoanTietKiem>(taiKhoan)->Nhap(soTK, sd, tt, ngay, ls);
+        }
+        else {
+            taiKhoan = make_shared<TaiKhoanThanhToan>();
+            dynamic_pointer_cast<TaiKhoanThanhToan>(taiKhoan)->Nhap(soTK, sd, tt, ngay);
+        }
+    }
+
+    string Xuat() const {
+        ostringstream oss;
+        oss << "\n--- THONG TIN KHACH HANG ---\n";
+        oss << "Ho ten: " << hoTen << "\n";
+        oss << "Gioi tinh: " << gioiTinh << "\n";
+        oss << "Ngay sinh: " << ngaySinh.ToString() << "\n";
+        oss << "CMND: " << soCMND << "\n";
+        oss << "Dia chi: " << diaChi << "\n";
+        oss << "SDT: " << sdt << "\n";
+        oss << "Email: " << email << "\n";
+        if (taiKhoan) {
+            oss << "--- Tai khoan ---\n";
+            oss << taiKhoan->Xuat();
+        }
+        return oss.str();
+    }
+
+    string LayCMND() const {
+        return soCMND;
+    }
+
+    shared_ptr<TaiKhoan> LayTaiKhoan() const {
+        return taiKhoan;
+    }
+
+    void GhiCSV(ofstream& fout) const {
+        fout << hoTen << "," << gioiTinh << "," << ngaySinh.ToString() << ","
+            << soCMND << "," << diaChi << "," << sdt << "," << email << ",";
+        taiKhoan->GhiCSV(fout);
+        fout << "\n";
+    }
+
+    void DocTuDongCSV(const vector<string>& fields) {
+        hoTen = fields[0];
+        gioiTinh = fields[1];
+        ngaySinh.TuChuoi(fields[2]);
+        soCMND = fields[3];
+        diaChi = fields[4];
+        sdt = fields[5];
+        email = fields[6];
+        if (fields[7] == "TietKiem") {
+            taiKhoan = make_shared<TaiKhoanTietKiem>();
+        }
+        else {
+            taiKhoan = make_shared<TaiKhoanThanhToan>();
+        }
+        vector<string> taiKhoanFields(fields.begin() + 7, fields.end());
+        taiKhoan->DocTuDongCSV(taiKhoanFields);
+    }
+};
+
+class QuanLyKhachHang {
+private:
+    vector<shared_ptr<KhachHang>> danhSach;
+
+public:
+    void ThemKhachHang(const string& ht, const string& gt, const string& ns, const string& cmnd, 
+                       const string& dc, const string& sdt_, const string& email_, int loai, 
+                       const string& soTK, double sd, int tt, const string& ngay, double ls = 0) {
+        auto kh = make_shared<KhachHang>();
+        kh->Nhap(ht, gt, ns, cmnd, dc, sdt_, email_, loai, soTK, sd, tt, ngay, ls);
+        danhSach.push_back(kh);
+    }
+
+    string LietKe() const {
+        if (danhSach.empty()) {
+            return "Danh sach khach hang trong!\n";
+        }
+        ostringstream oss;
+        for (const auto& kh : danhSach) {
+            oss << kh->Xuat();
+            oss << "--------------------------\n";
+        }
+        return oss.str();
+    }
+
+    string TimTheoCMND(const string& cmnd) const {
+        for (const auto& kh : danhSach) {
+            if (kh->LayCMND() == cmnd) {
+                return kh->Xuat();
+            }
+        }
+        return "Khong tim thay khach hang co CMND: " + cmnd + "\n";
+    }
+
+    string GuiTien(const string& cmnd, double tien, const string& thoiGian) {
+        for (const auto& kh : danhSach) {
+            if (kh->LayCMND() == cmnd) {
+                if (kh->LayTaiKhoan()->GuiTien(tien, thoiGian)) {
+                    return "Da gui " + to_string(tien) + " vao tai khoan cua khach hang co CMND: " + cmnd + "\n";
+                }
+                return "Gui tien that bai!\n";
+            }
+        }
+        return "Khong tim thay khach hang co CMND: " + cmnd + "\n";
+    }
+
+    string RutTien(const string& cmnd, double tien, const string& thoiGian) {
+        for (const auto& kh : danhSach) {
+            if (kh->LayCMND() == cmnd) {
+                if (kh->LayTaiKhoan()->RutTien(tien, thoiGian)) {
+                    return "Da rut " + to_string(tien) + " tu tai khoan cua khach hang co CMND: " + cmnd + "\n";
+                }
+                return "Rut tien that bai!\n";
+            }
+        }
+        return "Khong tim thay khach hang co CMND: " + cmnd + "\n";
+    }
+
+    string XemLichSuGiaoDich(const string& cmnd) const {
+        for (const auto& kh : danhSach) {
+            if (kh->LayCMND() == cmnd) {
+                ostringstream oss;
+                oss << "Tim thay khach hang voi CMND: " << cmnd << "\n";
+                const auto& lichSu = kh->LayTaiKhoan()->LayLichSuGiaoDich();
+                if (lichSu.empty()) {
+                    oss << "Khong co giao dich nao cho tai khoan cua khach hang co CMND: " << cmnd << "\n";
+                }
+                else {
+                    oss << "Lich su giao dich cho khach hang co CMND: " << cmnd << "\n";
+                    for (size_t i = 0; i < lichSu.size(); ++i) {
+                        oss << "  " << (i + 1) << ". " << lichSu[i].ThongTin() << "\n";
+                    }
+                }
+                return oss.str();
+            }
+        }
+        return "Khong tim thay khach hang co CMND: " + cmnd + "\n";
+    }
+
+    string GhiCSV(const string& filename) const {
+        ofstream fout(filename);
+        if (!fout.is_open()) {
+            return "Khong the mo file " + filename + " de ghi!\n";
+        }
+        fout << "HoTen,GioiTinh,NgaySinh,SoCMND,DiaChi,SDT,Email,LoaiTaiKhoan,SoTaiKhoan,SoDu,LaiSuat,TrangThai,NgayMo,SoGiaoDich,[LoaiGiaoDich,SoTien,ThoiGian]...\n";
+        for (const auto& kh : danhSach) {
+            kh->GhiCSV(fout);
+        }
+        fout.close();
+        return "Da ghi danh sach khach hang vao " + filename + "\n";
+    }
+
+    string DocCSV(const string& filename) {
+        ifstream fin(filename);
+        if (!fin.is_open()) {
+            return "Khong the mo file " + filename + " de doc!\n";
+        }
+        danhSach.clear();
+        string line;
+        getline(fin, line);
+        while (getline(fin, line)) {
+            vector<string> fields;
+            string field;
+            stringstream ss(line);
+            while (getline(ss, field, ',')) {
+                fields.push_back(field);
+            }
+            if (fields.size() < 7) continue;
+            auto kh = make_shared<KhachHang>();
+            kh->DocTuDongCSV(fields);
+            danhSach.push_back(kh);
+        }
+        fin.close();
+        return "Da doc danh sach khach hang tu " + filename + "\n";
+    }
+};
+
+class BankApp : public Gtk::Window {
+private:
+    QuanLyKhachHang ql;
+    Gtk::Box main_box, button_box, input_box;
+    Gtk::TextView output_view;
+    Glib::RefPtr<Gtk::TextBuffer> output_buffer;
+    Gtk::ScrolledWindow scrolled_window;
+
+    Gtk::Button btn_them, btn_lietke, btn_tim, btn_gui, btn_rut, btn_lichsu, btn_ghi, btn_doc, btn_thoat;
+    Gtk::Label lbl_hoTen, lbl_gioiTinh, lbl_ngaySinh, lbl_cmnd, lbl_diaChi, lbl_sdt, lbl_email, 
+               lbl_loaiTK, lbl_soTK, lbl_soDu, lbl_trangThai, lbl_ngayMo, lbl_laiSuat, 
+               lbl_tien, lbl_thoiGian, lbl_file;
+    Gtk::Entry entry_hoTen, entry_gioiTinh, entry_ngaySinh, entry_cmnd, entry_diaChi, 
+               entry_sdt, entry_email, entry_soTK, entry_soDu, entry_trangThai, 
+               entry_ngayMo, entry_laiSuat, entry_tien, entry_thoiGian, entry_file;
+    Gtk::ComboBoxText combo_loaiTK;
+
+public:
+    BankApp() : main_box(Gtk::ORIENTATION_VERTICAL), 
+                button_box(Gtk::ORIENTATION_HORIZONTAL), 
+                input_box(Gtk::ORIENTATION_VERTICAL),
+                btn_them("Them khach hang"), 
+                btn_lietke("Liet ke tat ca"), 
+                btn_tim("Tim theo CMND"), 
+                btn_gui("Gui tien"), 
+                btn_rut("Rut tien"), 
+                btn_lichsu("Xem lich su giao dich"), 
+                btn_ghi("Ghi vao CSV"), 
+                btn_doc("Doc tu CSV"), 
+                btn_thoat("Thoat"),
+                lbl_hoTen("Ho ten:"), 
+                lbl_gioiTinh("Gioi tinh (Nam/Nu):"), 
+                lbl_ngaySinh("Ngay sinh (dd mm yyyy):"), 
+                lbl_cmnd("So CMND:"), 
+                lbl_diaChi("Dia chi:"), 
+                lbl_sdt("SDT:"), 
+                lbl_email("Email:"), 
+                lbl_loaiTK("Loai tai khoan:"), 
+                lbl_soTK("So tai khoan:"), 
+                lbl_soDu("So du:"), 
+                lbl_trangThai("Trang thai (1/0):"), 
+                lbl_ngayMo("Ngay mo (dd mm yyyy):"), 
+                lbl_laiSuat("Lai suat (%):"), 
+                lbl_tien("So tien:"), 
+                lbl_thoiGian("Thoi gian (yyyy-mm-dd hh:mm):"), 
+                lbl_file("Ten file CSV:") {
+        set_title("Quan Ly Ngan Hang");
+        set_default_size(800, 600);
+
+        output_buffer = Gtk::TextBuffer::create();
+        output_view.set_buffer(output_buffer);
+        output_view.set_editable(false);
+        scrolled_window.set_policy(Gtk::POLICY_AUTOMATIC, Gtk::POLICY_AUTOMATIC);
+        scrolled_window.add(output_view);
+
+        combo_loaiTK.append("1 - Tiet kiem");
+        combo_loaiTK.append("2 - Thanh toan");
+        combo_loaiTK.set_active(0);
+
+        input_box.pack_start(lbl_hoTen);
+        input_box.pack_start(entry_hoTen);
+        input_box.pack_start(lbl_gioiTinh);
+        input_box.pack_start(entry_gioiTinh);
+        input_box.pack_start(lbl_ngaySinh);
+        input_box.pack_start(entry_ngaySinh);
+        input_box.pack_start(lbl_cmnd);
+        input_box.pack_start(entry_cmnd);
+        input_box.pack_start(lbl_diaChi);
+        input_box.pack_start(entry_diaChi);
+        input_box.pack_start(lbl_sdt);
+        input_box.pack_start(entry_sdt);
+        input_box.pack_start(lbl_email);
+        input_box.pack_start(entry_email);
+        input_box.pack_start(lbl_loaiTK);
+        input_box.pack_start(combo_loaiTK);
+        input_box.pack_start(lbl_soTK);
+        input_box.pack_start(entry_soTK);
+        input_box.pack_start(lbl_soDu);
+        input_box.pack_start(entry_soDu);
+        input_box.pack_start(lbl_trangThai);
+        input_box.pack_start(entry_trangThai);
+        input_box.pack_start(lbl_ngayMo);
+        input_box.pack_start(entry_ngayMo);
+        input_box.pack_start(lbl_laiSuat);
+        input_box.pack_start(entry_laiSuat);
+        input_box.pack_start(lbl_tien);
+        input_box.pack_start(entry_tien);
+        input_box.pack_start(lbl_thoiGian);
+        input_box.pack_start(entry_thoiGian);
+        input_box.pack_start(lbl_file);
+        input_box.pack_start(entry_file);
+
+        button_box.pack_start(btn_them);
+        button_box.pack_start(btn_lietke);
+        button_box.pack_start(btn_tim);
+        button_box.pack_start(btn_gui);
+        button_box.pack_start(btn_rut);
+        button_box.pack_start(btn_lichsu);
+        button_box.pack_start(btn_ghi);
+        button_box.pack_start(btn_doc);
+        button_box.pack_start(btn_thoat);
+
+        main_box.pack_start(input_box, Gtk::PACK_SHRINK);
+        main_box.pack_start(button_box, Gtk::PACK_SHRINK);
+        main_box.pack_start(scrolled_window);
+
+        add(main_box);
+        show_all_children();
+
+        btn_them.signal_clicked().connect(sigc::mem_fun(*this, &BankApp::on_them_clicked));
+        btn_lietke.signal_clicked().connect(sigc::mem_fun(*this, &BankApp::on_lietke_clicked));
+        btn_tim.signal_clicked().connect(sigc::mem_fun(*this, &BankApp::on_tim_clicked));
+        btn_gui.signal_clicked().connect(sigc::mem_fun(*this, &BankApp::on_gui_clicked));
+        btn_rut.signal_clicked().connect(sigc::mem_fun(*this, &BankApp::on_rut_clicked));
+        btn_lichsu.signal_clicked().connect(sigc::mem_fun(*this, &BankApp::on_lichsu_clicked));
+        btn_ghi.signal_clicked().connect(sigc::mem_fun(*this, &BankApp::on_ghi_clicked));
+        btn_doc.signal_clicked().connect(sigc::mem_fun(*this, &BankApp::on_doc_clicked));
+        btn_thoat.signal_clicked().connect(sigc::mem_fun(*this, &BankApp::on_thoat_clicked));
+    }
+
+    void on_them_clicked() {
+        int loai = (combo_loaiTK.get_active_text() == "1 - Tiet kiem") ? 1 : 2;
+        double laiSuat = (loai == 1) ? stod(entry_laiSuat.get_text()) : 0.0;
+        ql.ThemKhachHang(entry_hoTen.get_text(), entry_gioiTinh.get_text(), 
+                         entry_ngaySinh.get_text(), entry_cmnd.get_text(), 
+                         entry_diaChi.get_text(), entry_sdt.get_text(), 
+                         entry_email.get_text(), loai, entry_soTK.get_text(), 
+                         stod(entry_soDu.get_text()), stoi(entry_trangThai.get_text()), 
+                         entry_ngayMo.get_text(), laiSuat);
+        output_buffer->set_text("Da them khach hang thanh cong!\n");
+    }
+
+    void on_lietke_clicked() {
+        output_buffer->set_text(ql.LietKe());
+    }
+
+    void on_tim_clicked() {
+        output_buffer->set_text(ql.TimTheoCMND(entry_cmnd.get_text()));
+    }
+
+    void on_gui_clicked() {
+        output_buffer->set_text(ql.GuiTien(entry_cmnd.get_text(), 
+                                            stod(entry_tien.get_text()), 
+                                            entry_thoiGian.get_text()));
+    }
+
+    void on_rut_clicked() {
+        output_buffer->set_text(ql.RutTien(entry_cmnd.get_text(), 
+                                            stod(entry_tien.get_text()), 
+                                            entry_thoiGian.get_text()));
+    }
+
+    void on_lichsu_clicked() {
+        output_buffer->set_text(ql.XemLichSuGiaoDich(entry_cmnd.get_text()));
+    }
+
+    void on_ghi_clicked() {
+        string filename = entry_file.get_text().empty() ? "khachhang.csv" : entry_file.get_text();
+        output_buffer->set_text(ql.GhiCSV(filename));
+    }
+
+    void on_doc_clicked() {
+        string filename = entry_file.get_text().empty() ? "khachhang.csv" : entry_file.get_text();
+        output_buffer->set_text(ql.DocCSV(filename));
+    }
+
+    void on_thoat_clicked() {
+        hide();
+    }
+};
+
+int main(int argc, char* argv[]) {
+    auto app = Gtk::Application::create(argc, argv, "org.gtkmm.bankapp");
+    BankApp window;
+    return app->run(window);
+}
